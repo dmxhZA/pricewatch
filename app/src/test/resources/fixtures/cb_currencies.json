@@ -1,0 +1,67 @@
+[
+{
+"id": "ADA",
+"name": "Cardano",
+"status": "online"
+},
+{
+"id": "BCH",
+"name": "Bitcoin Cash",
+"status": "online"
+},
+{
+"id": "BTC",
+"name": "Bitcoin",
+"status": "online"
+},
+{
+"id": "BTRST",
+"name": "Braintrust",
+"status": "online"
+},
+{
+"id": "DOGE",
+"name": "Dogecoin",
+"status": "online"
+},
+{
+"id": "ETC",
+"name": "Ether Classic",
+"status": "online"
+},
+{
+"id": "ETH",
+"name": "Ether",
+"status": "online"
+},
+{
+"id": "GRT",
+"name": "The Graph",
+"status": "online"
+},
+{
+"id": "LINK",
+"name": "Chainlink",
+"status": "online"
+},
+{
+"id": "SHPING",
+"name": "Shping",
+"status": "online"
+},
+{
+"id": "SOL",
+"name": "Solana",
+"status": "online"
+},
+{
+"id": "WBTC",
+"name": "Wrapped Bitcoin",
+"status": "delisted"
+},
+{
+"id": "XRP",
+"name": "XRP",
+"status": "online"
+}
+]

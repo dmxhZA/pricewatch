@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the Compose theme's background so startup does not flash. -->
+    <color name="window_background">#F9F9F7</color>
+    <color name="launcher_background">#1C5CAB</color>
+</resources>
