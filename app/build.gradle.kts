@@ -1,8 +1,27 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
 }
+
+// The signing key and its password exist only on this machine, in files git ignores; see
+// signing/README.md. Without them, debug builds use Android's standard debug key and release
+// builds come out unsigned.
+val signingProperties: Properties? =
+  providers
+    .fileContents(rootProject.layout.projectDirectory.file("signing/keystore.properties"))
+    .asText
+    .orNull
+    ?.let { text -> Properties().apply { load(text.reader()) } }
+
+if (signingProperties == null) {
+  logger.warn("No signing key (signing/keystore.properties), so release builds are unsigned. See signing/README.md.")
+}
+
+fun Properties.required(name: String): String =
+  getProperty(name)?.takeIf { it.isNotBlank() } ?: throw GradleException("signing/keystore.properties has no $name")
 
 android {
   namespace = "app.pricewatch"
@@ -16,23 +35,27 @@ android {
   }
 
   signingConfigs {
-    // One key, kept in the project, signs every build. Android only installs an update over an
-    // existing app when both are signed with the same key, so this is what lets a rebuilt APK
-    // replace the installed one without losing the watchlist. See signing/README.md.
-    create("personal") {
-      storeFile = rootProject.file("signing/pricewatch.jks")
-      storePassword = "pricewatch"
-      keyAlias = "pricewatch"
-      keyPassword = "pricewatch"
+    // One personal key signs every build. Android only installs an update over an existing app
+    // when both are signed with the same key, so this is what lets a rebuilt APK replace the
+    // installed one without losing the watchlist.
+    signingProperties?.let { key ->
+      create("personal") {
+        // A relative path is inside signing/; an absolute one can point anywhere.
+        storeFile = rootProject.file("signing").resolve(key.required("storeFile"))
+        storePassword = key.required("storePassword")
+        keyAlias = key.required("keyAlias")
+        keyPassword = key.required("keyPassword")
+      }
     }
   }
 
   buildTypes {
-    debug { signingConfig = signingConfigs.getByName("personal") }
+    val personal = signingConfigs.findByName("personal")
+    debug { if (personal != null) signingConfig = personal }
     release {
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("personal")
+      signingConfig = personal
     }
   }
   compileOptions {
