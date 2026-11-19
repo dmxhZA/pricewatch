@@ -372,25 +372,34 @@ private fun EditDialog(asset: Asset, onDismiss: () -> Unit, onSave: (String, Ass
   AlertDialog(
     onDismissRequest = onDismiss,
     title = { Text("Edit ${asset.symbol}") },
-    text = {
-      Column(Modifier.verticalScroll(rememberScrollState())) {
-        OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true, label = { Text("Name") })
-        Text(
-          "Leave empty to go back to “${asset.name}”.",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(top = 8.dp),
-        )
-        Text("Section", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
-        GroupChoices(selected = group, suggested = asset.type.suggestedGroup, onSelect = { group = it })
-      }
-    },
+    text = { EditFields(asset, text, onTextChange = { text = it }, group, onGroupChange = { group = it }) },
     confirmButton = {
       // Saving the provider's own name means "no custom name".
       TextButton(onClick = { onSave(if (text.trim() == asset.name) "" else text, group) }) { Text("Save") }
     },
     dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
   )
+}
+
+@Composable
+private fun EditFields(
+  asset: Asset,
+  text: String,
+  onTextChange: (String) -> Unit,
+  group: AssetGroup,
+  onGroupChange: (AssetGroup) -> Unit,
+) {
+  Column(Modifier.verticalScroll(rememberScrollState())) {
+    OutlinedTextField(value = text, onValueChange = onTextChange, singleLine = true, label = { Text("Name") })
+    Text(
+      "Leave empty to go back to “${asset.name}”.",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.padding(top = 8.dp),
+    )
+    Text("Section", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
+    GroupChoices(selected = group, suggested = asset.type.suggestedGroup, onSelect = onGroupChange)
+  }
 }
 
 @Composable
@@ -512,5 +521,12 @@ private fun WatchlistEmptyPreview() {
 @Preview(showBackground = true)
 @Composable
 private fun EditDialogPreview() {
-  PriceWatchTheme { EditDialog(PreviewData.sp500, onDismiss = {}, onSave = { _, _ -> }) }
+  // A dialog opens in its own window, which previews cannot show; draw its fields in place instead.
+  PriceWatchTheme {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.width(312.dp)) {
+      Box(Modifier.padding(24.dp)) {
+        EditFields(PreviewData.sp500, "My index fund", {}, AssetGroup.INDICES, {})
+      }
+    }
+  }
 }
