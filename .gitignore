@@ -13,3 +13,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# The signing key and its password stay on this machine. See signing/README.md.
+*.jks
+*.keystore
+keystore.properties

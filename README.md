@@ -35,8 +35,9 @@ Needs JDK 17 or newer and the Android SDK (platform 36); set `JAVA_HOME` and `AN
     ./gradlew assembleRelease      # builds the APK
     ./gradlew testDebugUnitTest    # runs the tests on this machine, no phone needed
 
-Every build is signed with the key in `signing/`, so a rebuilt APK installs over the previous one
-and keeps the watchlist. See `signing/README.md`.
+Before the first build, create your signing key with `signing/generate-key.sh`. Every build is
+signed with it, so a rebuilt APK installs over the previous one and keeps the watchlist. The key
+and its password stay on your machine, out of git, so back them up. See `signing/README.md`.
 
 The tests replace only the network, with responses recorded from the two real services
 (`app/src/test/resources/fixtures`). `AppFlowTest` drives the real screens end to end.
