@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -20,12 +21,15 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -54,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.pricewatch.data.model.Asset
+import app.pricewatch.data.model.AssetGroup
 import app.pricewatch.ui.common.appContainer
 import app.pricewatch.ui.common.details
 import app.pricewatch.ui.common.shortMessage
@@ -70,7 +75,8 @@ fun SearchRoute(onBack: () -> Unit, onSettings: () -> Unit) {
   SearchScreen(
     state = state,
     onQueryChange = viewModel::setQuery,
-    onToggle = viewModel::toggle,
+    onAdd = viewModel::add,
+    onRemove = viewModel::remove,
     onBack = onBack,
     onSettings = onSettings,
   )
@@ -81,7 +87,8 @@ fun SearchRoute(onBack: () -> Unit, onSettings: () -> Unit) {
 fun SearchScreen(
   state: SearchUiState,
   onQueryChange: (String) -> Unit,
-  onToggle: (Asset) -> Unit,
+  onAdd: (Asset, AssetGroup) -> Unit,
+  onRemove: (Asset) -> Unit,
   onBack: () -> Unit,
   onSettings: () -> Unit,
 ) {
@@ -144,8 +151,9 @@ fun SearchScreen(
         source = "Coinbase · no key needed",
         state = state.crypto,
         emptyText = "No crypto pair matches.",
-        addedIds = state.addedIds,
-        onToggle = onToggle,
+        added = state.added,
+        onAdd = onAdd,
+        onRemove = onRemove,
         onSettings = onSettings,
       )
       section(
@@ -154,8 +162,9 @@ fun SearchScreen(
         state = state.market,
         emptyText = "No match on the markets the free plan covers.",
         idleText = "Type a name or ticker, for example “Apple” or “EUR/USD”.",
-        addedIds = state.addedIds,
-        onToggle = onToggle,
+        added = state.added,
+        onAdd = onAdd,
+        onRemove = onRemove,
         onSettings = onSettings,
       )
     }
@@ -167,8 +176,9 @@ private fun LazyListScope.section(
   source: String,
   state: SectionState,
   emptyText: String,
-  addedIds: Set<String>,
-  onToggle: (Asset) -> Unit,
+  added: Map<String, AssetGroup>,
+  onAdd: (Asset, AssetGroup) -> Unit,
+  onRemove: (Asset) -> Unit,
   onSettings: () -> Unit,
   idleText: String? = null,
 ) {
@@ -203,7 +213,12 @@ private fun LazyListScope.section(
         item(key = "empty-$title") { SectionMessage(emptyText) }
       }
       items(state.assets, key = { it.id }) { asset ->
-        ResultRow(asset = asset, added = asset.id in addedIds, onToggle = { onToggle(asset) })
+        ResultRow(
+          asset = asset,
+          addedTo = added[asset.id],
+          onAdd = { group -> onAdd(asset, group) },
+          onRemove = { onRemove(asset) },
+        )
         HorizontalDivider()
       }
       if (state.hiddenCount > 0) {
@@ -237,13 +252,21 @@ private fun SectionMessage(text: String, isError: Boolean = false) {
   )
 }
 
+/**
+ * One search result. Adding asks which watchlist section to put it in, with the one that suits its
+ * type marked; an added result shows its section and is removed with one tap.
+ */
 @Composable
-private fun ResultRow(asset: Asset, added: Boolean, onToggle: () -> Unit) {
-  val action = if (added) "Remove ${asset.symbol} from watchlist" else "Add ${asset.symbol} to watchlist"
+private fun ResultRow(asset: Asset, addedTo: AssetGroup?, onAdd: (AssetGroup) -> Unit, onRemove: () -> Unit) {
+  var choosingGroup by remember { mutableStateOf(false) }
+  val action = if (addedTo != null) "Remove ${asset.symbol} from watchlist" else "Add ${asset.symbol} to watchlist"
+  val onClick: () -> Unit = {
+    if (addedTo != null) onRemove() else choosingGroup = true
+  }
   Row(
     modifier =
       Modifier.fillMaxWidth()
-        .clickable(onClickLabel = action, onClick = onToggle)
+        .clickable(onClickLabel = action, onClick = onClick)
         .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
@@ -264,12 +287,73 @@ private fun ResultRow(asset: Asset, added: Boolean, onToggle: () -> Unit) {
         overflow = TextOverflow.Ellipsis,
       )
     }
-    IconButton(onClick = onToggle) {
-      if (added) {
-        Icon(Icons.Default.Check, contentDescription = action, tint = MaterialTheme.colorScheme.primary)
-      } else {
-        Icon(Icons.Default.Add, contentDescription = action)
+    if (addedTo != null) {
+      Text(
+        addedTo.label,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 1,
+        modifier = Modifier.padding(start = 8.dp),
+      )
+    }
+    Box {
+      IconButton(onClick = onClick) {
+        if (addedTo != null) {
+          Icon(Icons.Default.Check, contentDescription = action, tint = MaterialTheme.colorScheme.primary)
+        } else {
+          Icon(Icons.Default.Add, contentDescription = action)
+        }
       }
+      GroupMenu(
+        symbol = asset.symbol,
+        suggested = asset.type.suggestedGroup,
+        expanded = choosingGroup,
+        onDismiss = { choosingGroup = false },
+        onChoose = { group ->
+          choosingGroup = false
+          onAdd(group)
+        },
+      )
+    }
+  }
+}
+
+@Composable
+private fun GroupMenu(
+  symbol: String,
+  suggested: AssetGroup,
+  expanded: Boolean,
+  onDismiss: () -> Unit,
+  onChoose: (AssetGroup) -> Unit,
+) {
+  DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) { GroupMenuItems(symbol, suggested, onChoose) }
+}
+
+@Composable
+private fun GroupMenuItems(symbol: String, suggested: AssetGroup, onChoose: (AssetGroup) -> Unit) {
+  Column {
+    Text(
+      "Add $symbol to",
+      style = MaterialTheme.typography.labelLarge,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+    AssetGroup.entries.forEach { group ->
+      DropdownMenuItem(
+        text = { Text(group.label) },
+        onClick = { onChoose(group) },
+        trailingIcon =
+          if (group == suggested) {
+            {
+              Text(
+                "Suggested",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp),
+              )
+            }
+          } else null,
+      )
     }
   }
 }
@@ -277,13 +361,24 @@ private fun ResultRow(asset: Asset, added: Boolean, onToggle: () -> Unit) {
 @Preview(showBackground = true)
 @Composable
 private fun SearchPreview() {
-  PriceWatchTheme { SearchScreen(PreviewData.search, {}, {}, {}, {}) }
+  PriceWatchTheme { SearchScreen(PreviewData.search, {}, { _, _ -> }, {}, {}, {}) }
 }
 
 @Preview(showBackground = true)
 @Composable
 private fun SearchNeedsKeyPreview() {
   PriceWatchTheme(darkTheme = true) {
-    SearchScreen(PreviewData.search.copy(query = "", market = SectionState.NeedsApiKey), {}, {}, {}, {})
+    SearchScreen(PreviewData.search.copy(query = "", market = SectionState.NeedsApiKey), {}, { _, _ -> }, {}, {}, {})
+  }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun GroupMenuPreview() {
+  // A menu only renders in a popup, which previews cannot show; draw its items in place instead.
+  PriceWatchTheme {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.width(240.dp)) {
+      GroupMenuItems(PreviewData.sp500.symbol, AssetGroup.INDICES, onChoose = {})
+    }
   }
 }

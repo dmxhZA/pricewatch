@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.pricewatch.data.MarketRepository
 import app.pricewatch.data.model.Asset
+import app.pricewatch.data.model.AssetGroup
 import app.pricewatch.data.model.ErrorKind
 import app.pricewatch.data.model.Provider
 import app.pricewatch.data.model.Quote
@@ -42,7 +43,13 @@ data class WatchlistUiState(
   /** The list contains assets that cannot be priced until an API key is entered. */
   val needsApiKey: Boolean = false,
   val autoRefreshSeconds: Int = Settings.DEFAULT_AUTO_REFRESH_SECONDS,
-)
+) {
+  /** The rows by section, in display order. Sections with nothing in them are left out. */
+  val sections: List<WatchlistSection> =
+    rows.groupBy { it.asset.group }.toSortedMap().map { (group, rows) -> WatchlistSection(group, rows) }
+}
+
+data class WatchlistSection(val group: AssetGroup, val rows: List<WatchlistRow>)
 
 class WatchlistViewModel(
   private val watchlist: WatchlistStore,
@@ -106,7 +113,11 @@ class WatchlistViewModel(
 
   fun move(asset: Asset, offset: Int) = watchlist.move(asset.id, offset)
 
-  fun rename(asset: Asset, label: String) = watchlist.rename(asset.id, label)
+  /** Applies the edit dialog: the user's name for the entry and the section it belongs in. */
+  fun edit(asset: Asset, label: String, group: AssetGroup) {
+    watchlist.rename(asset.id, label)
+    watchlist.setGroup(asset.id, group)
+  }
 
   /** Removes [asset] and returns where it was, so the removal can be undone with [restore]. */
   fun remove(asset: Asset): Int {
