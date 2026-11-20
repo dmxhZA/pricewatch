@@ -22,32 +22,6 @@ and uninstalling deletes its locally stored watchlist.
 Without these files, debug builds are signed with Android's standard debug key and release builds
 come out unsigned.
 
-## Signing on GitHub Actions
-
-`.github/workflows/build.yml` builds the APK on GitHub. It can sign it with your key only if you
-put the key in the repository's secrets, so that it leaves your machine. Before you do, consider:
-
-- Anyone who can push to this repository can write a workflow that reads the secrets. Today that
-  is only you.
-- Pull requests never get the key: the workflow skips that step for them. GitHub also withholds
-  secrets from pull requests opened from forks.
-- The repository is public, so any signed-in GitHub user can download the signed APK from a run.
-  The APK contains no secrets (your Twelve Data key lives on the phone), but anyone could install
-  your build.
-
-To add the key, open the repository's Settings, then Secrets and variables, then Actions, and
-create two secrets:
-
-- `SIGNING_KEYSTORE_BASE64`: the output of `base64 -w0 signing/personal.jks`
-- `SIGNING_KEYSTORE_PASSWORD`: the `storePassword` value in `signing/keystore.properties`
-
-Or do it with `gh` (your token needs permission to write secrets):
-
-    base64 -w0 signing/personal.jks | gh secret set SIGNING_KEYSTORE_BASE64
-    sed -n 's/^storePassword=//p' signing/keystore.properties | tr -d '\n' | gh secret set SIGNING_KEYSTORE_PASSWORD
-
-To take the key off GitHub again, delete both secrets.
-
 ## The old key
 
 Earlier commits of this repository contain a key (`signing/pricewatch.jks`) and its password.

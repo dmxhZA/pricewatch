@@ -40,9 +40,9 @@ Needs JDK 17 or newer and the Android SDK (platform 36); set `JAVA_HOME` and `AN
     ./gradlew assembleRelease      # builds the APK
     ./gradlew testDebugUnitTest    # runs the tests on this machine, no phone needed
 
-GitHub Actions does both for every pull request and every push to `main` or a `v*` tag
-(`.github/workflows/build.yml`). After a push, the run keeps the APK as a download named
-`pricewatch-apk`, signed only if your key is in the repository secrets (see `signing/README.md`).
+GitHub Actions runs both for every pull request and every push to `main`
+(`.github/workflows/build.yml`). That only checks that the app builds and the tests pass. The APK
+it builds is unsigned and isn't kept, so release APKs come only from your machine.
 
 Before the first build, create your signing key with `signing/generate-key.sh`. Every build is
 signed with it, so a rebuilt APK installs over the previous one and keeps the watchlist. The key
