@@ -40,6 +40,10 @@ Needs JDK 17 or newer and the Android SDK (platform 36); set `JAVA_HOME` and `AN
     ./gradlew assembleRelease      # builds the APK
     ./gradlew testDebugUnitTest    # runs the tests on this machine, no phone needed
 
+GitHub Actions runs both for every pull request and every push to `main`
+(`.github/workflows/build.yml`). That only checks that the app builds and the tests pass. The APK
+it builds is unsigned and isn't kept, so release APKs come only from your machine.
+
 Before the first build, create your signing key with `signing/generate-key.sh`. Every build is
 signed with it, so a rebuilt APK installs over the previous one and keeps the watchlist. The key
 and its password stay on your machine, out of git, so back them up. See `signing/README.md`.
