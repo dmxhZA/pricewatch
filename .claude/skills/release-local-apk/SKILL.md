@@ -61,6 +61,12 @@ carries the PR's title as its body, so
 `git log --merges --format='- %b' <previous tag>..HEAD` lists them (use all of history for the
 first tag).
 
+`gh pr merge` may be refused with "Resource not accessible by personal access token". In that
+case the user's token cannot merge (merging needs its Contents: write permission). Ask the user
+to merge the PR on GitHub, and continue from `git switch main` once they have. Don't get the
+change onto `main` another way, such as pushing over SSH: the user merges PRs themselves, and
+the token's limits may be deliberate.
+
 Never move or re-push an existing tag: tags are public and may already be fetched. If something is
 wrong after tagging, fix it and release the next version.
 
