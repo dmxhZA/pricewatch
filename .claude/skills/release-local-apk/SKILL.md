@@ -1,6 +1,6 @@
 ---
 name: release-local-apk
-description: Cut a PriceWatch release on this machine and put the signed APK in the shared folder (the from_claude share, mounted at /mnt/from-claude). Bumps versionCode/versionName through a release PR, tags vX.Y, builds the release APK with the local signing key, checks its version and signature, and copies it to the share. Use this whenever the user asks to cut, make or ship a release, tag a version, build "the next APK" or a new APK for their phone, or upload an APK to the shared folder, even if they don't say "release".
+description: Cut a PriceWatch release on this machine and put the signed APK in the shared folder (the from_claude share, mounted at /mnt/from-claude). Bumps versionCode/versionName through a release PR (which the user merges), tags vX.Y, builds the release APK with the local signing key, checks its version and signature, and copies it to the share. Use this whenever the user asks to cut, make or ship a release, tag a version, build "the next APK" or a new APK for their phone, or upload an APK to the shared folder, even if they don't say "release".
 ---
 
 # Release a local APK
@@ -25,8 +25,8 @@ user names another folder, pass it as a second argument here and to `upload`.
 If a check fails, stop and tell the user what to fix before anything gets tagged. The mount check
 matters even though the copy comes last. When the share is not mounted, `/mnt/from-claude` is an
 ordinary empty folder on the local disk, so a copy "succeeds" but never reaches the share. If the
-share is the only problem and the user wants the release anyway, carry on and run `upload` once
-it is mounted.
+share is the only problem and the user wants the release anyway, carry on without the upload
+(step 7).
 
 ## 2. Pick the version
 
@@ -42,52 +42,63 @@ sure the tag `v<version>` does not exist yet (`git tag -l`).
 The release is built from `main`, and two PRs can each pass on their own and still break each other
 once both are merged. On a failure, stop and report it; don't release around it.
 
-## 4. Bump the version through a PR, then tag the merge
+## 4. Open the release PR and wait for the user to merge it
 
-Changes reach `main` through PRs, and the version bump follows the same route:
+First collect the notes, which list what the release contains. Each PR merge commit carries the
+PR's title as its body, so `git log --merges --format='- %b' <previous tag>..HEAD` lists them (use
+all of history for the first tag). Then put the version bump up as a PR:
 
     git switch -c release-<version>
     # set versionCode and versionName in app/build.gradle.kts
     git commit -am "Release <version>"
     git push -u origin release-<version>
     gh pr create --base main --title "Release <version>" --body "<notes>"
-    gh pr merge --merge --delete-branch
+
+Then stop and ask the user to merge it. The user merges every PR themselves. Never run
+`gh pr merge`, and don't get the change onto `main` any other way, such as pushing over SSH. Their
+GitHub token can't merge anyway. Once they say it's merged, confirm with
+`gh pr view <number> --json state`. Don't push to the release branch after that: later commits
+wouldn't reach `main`.
+
+## 5. Tag the merge
+
     git switch main && git pull --ff-only
+    git branch -d release-<version>
     git tag -a v<version> -m "PriceWatch <version>" -m "<notes>"
     git push origin v<version>
 
-Before running these, collect the notes, which list what the release contains. Each PR merge commit
-carries the PR's title as its body, so
-`git log --merges --format='- %b' <previous tag>..HEAD` lists them (use all of history for the
-first tag).
+This repository's rules block deleting branches and force-pushing on GitHub. So the release branch
+stays there; only the local copy is deleted.
 
 Never move or re-push an existing tag: tags are public and may already be fetched. If something is
 wrong after tagging, fix it and release the next version.
 
-## 5. Build and verify
+## 6. Build and verify
 
     release build
 
 This builds `assembleRelease` from the tagged commit, which takes a few minutes on this machine.
 Then it checks the APK: package `app.pricewatch`, the versionCode and versionName from the build
 file, and a signature by the key in `signing/keystore.properties`, not a debug key or the old
-public key.
+public key. The APK stays at `app/build/outputs/apk/release/app-release.apk`.
 
-## 6. Upload
+## 7. Upload
 
     release upload
 
 This copies the APK to `/mnt/from-claude/pricewatch-<version>.apk`, writes a `.sha256` file next to
-it, and checks the copy. It never replaces an existing file. Later (on the tag, after `build`) it
-can be run again by itself, for instance once the share is mounted.
+it, and checks the copy. It never replaces an existing file.
 
-## 7. Report
+If the share isn't mounted, skip this step and give the user the APK's local path instead. The
+upload can run by itself later, from the tag after `build`, once the share is mounted.
+
+## 8. Report
 
 Tell the user:
 - the version and versionCode
 - the tag and the release PR
 - what is in the release (the notes)
-- the APK's path in the share and its SHA-256
+- where the APK is (the share, or the local path if it wasn't uploaded) and its SHA-256
 - the signing certificate's SHA-256
 
 If their phone still has a build signed with an older key, remind them to uninstall that app once
