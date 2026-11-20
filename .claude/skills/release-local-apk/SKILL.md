@@ -51,10 +51,14 @@ Changes reach `main` through PRs, and the version bump follows the same route:
     git commit -am "Release <version>"
     git push -u origin release-<version>
     gh pr create --base main --title "Release <version>" --body "<notes>"
-    gh pr merge --merge --delete-branch
+    gh pr merge --merge
     git switch main && git pull --ff-only
+    git branch -d release-<version>
     git tag -a v<version> -m "PriceWatch <version>" -m "<notes>"
     git push origin v<version>
+
+This repository's rules block deleting branches and force-pushing on GitHub. So the release branch
+stays there; only the local copy is deleted. That's also why the merge leaves out `--delete-branch`.
 
 Before running these, collect the notes, which list what the release contains. Each PR merge commit
 carries the PR's title as its body, so
@@ -63,11 +67,10 @@ first tag).
 
 `gh pr merge` may be refused with "Resource not accessible by personal access token". In that
 case the user's token cannot merge (merging needs its Contents: write permission). Ask the user
-to merge the PR on GitHub. Once they have, continue from `git switch main`, and delete the leftover
-local branch with `git branch -d release-<version>`. Don't get the change onto `main` another way,
-such as pushing over SSH: the user merges PRs themselves, and the token's limits may be
-deliberate. After the release PR is merged, don't push to its branch: later commits wouldn't reach
-`main`.
+to merge the PR on GitHub, and continue from `git switch main` once they have. Don't get the
+change onto `main` another way, such as pushing over SSH: the user merges PRs themselves, and the
+token's limits may be deliberate. After the release PR is merged, don't push to its branch: later
+commits wouldn't reach `main`.
 
 Never move or re-push an existing tag: tags are public and may already be fetched. If something is
 wrong after tagging, fix it and release the next version.
