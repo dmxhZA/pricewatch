@@ -1,0 +1,69 @@
+# Runs the tests and builds the release APK for every pull request and every push to main or a
+# v* tag. Pushes sign the APK with your key if it is in the repository secrets (see
+# signing/README.md) and keep it as a downloadable artifact of the run. Pull requests never get
+# the key, so their APK is unsigned and isn't kept.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Restore the signing key
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::notice::No signing key in the repository secrets, so the APK is unsigned. See signing/README.md."
+            exit 0
+          fi
+          umask 077
+          echo "$KEYSTORE_BASE64" | base64 --decode > signing/personal.jks
+          printf 'storeFile=personal.jks\nstorePassword=%s\nkeyAlias=pricewatch\nkeyPassword=%s\n' \
+            "$KEYSTORE_PASSWORD" "$KEYSTORE_PASSWORD" > signing/keystore.properties
+
+      - name: Test
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build the release APK
+        run: ./gradlew assembleRelease
+
+      - name: Keep the APK
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: pricewatch-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Keep the test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: app/build/reports/tests/
