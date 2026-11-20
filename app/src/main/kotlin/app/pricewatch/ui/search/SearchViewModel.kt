@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.pricewatch.data.MarketRepository
 import app.pricewatch.data.model.Asset
+import app.pricewatch.data.model.AssetGroup
 import app.pricewatch.data.model.AssetType
 import app.pricewatch.data.model.DataException
 import app.pricewatch.data.model.ErrorKind
@@ -41,8 +42,8 @@ data class SearchUiState(
   val query: String = "",
   val crypto: SectionState = SectionState.Loading,
   val market: SectionState = SectionState.Idle,
-  /** Ids already on the watchlist, to show which results are added. */
-  val addedIds: Set<String> = emptySet(),
+  /** Ids already on the watchlist and the section each is in, to show which results are added where. */
+  val added: Map<String, AssetGroup> = emptyMap(),
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -86,7 +87,7 @@ class SearchViewModel(
           query = query,
           crypto = crypto,
           market = withoutDuplicateCrypto(market, crypto),
-          addedIds = assets.map { it.id }.toSet(),
+          added = assets.associate { it.id to it.group },
         )
       }
       .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SearchUiState())
@@ -95,10 +96,10 @@ class SearchViewModel(
     query.value = text
   }
 
-  /** Adds the asset to the watchlist, or removes it if it is already there. */
-  fun toggle(asset: Asset) {
-    if (watchlist.assets.value.any { it.id == asset.id }) watchlist.remove(asset.id) else watchlist.add(asset)
-  }
+  /** Adds the asset to the end of the watchlist section the user chose. */
+  fun add(asset: Asset, group: AssetGroup) = watchlist.add(asset.copy(group = group))
+
+  fun remove(asset: Asset) = watchlist.remove(asset.id)
 
   private suspend fun search(provider: Provider, text: String): SectionState =
     try {

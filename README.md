@@ -6,6 +6,11 @@ screen with a price chart (1D, 1W, 1M, 3M, 1Y, 5Y) and a settings screen. There 
 no account: the watchlist, settings and last known prices are JSON files in the app's private
 storage on the phone.
 
+The watchlist is split into sections: Crypto, Stocks, Indices & ETFs, and Other (forex,
+commodities; shown only when used). When you add an asset you pick its section; the one that fits
+the provider's instrument type ("Common Stock", "ETF", ...) is marked as suggested. Edit mode moves
+an entry to another section.
+
 ## Where prices come from
 
 | Assets | Source | Setup |

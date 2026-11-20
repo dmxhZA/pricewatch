@@ -1,5 +1,7 @@
 package app.pricewatch.data.model
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 /** Where an asset's prices come from. Serialized by name into the local watchlist file. */
@@ -27,9 +29,38 @@ enum class AssetType(val label: String) {
   /** Exchange-traded instruments have daily sessions; crypto and forex trade around the clock. */
   val hasSessions: Boolean
     get() = this != CRYPTO && this != FOREX
+
+  /** The watchlist section an asset of this type goes to unless the user picks another. */
+  val suggestedGroup: AssetGroup
+    get() =
+      when (this) {
+        CRYPTO -> AssetGroup.CRYPTO
+        STOCK -> AssetGroup.STOCKS
+        ETF,
+        FUND,
+        INDEX -> AssetGroup.INDICES
+        FOREX,
+        COMMODITY,
+        BOND,
+        OTHER -> AssetGroup.OTHER
+      }
+}
+
+/**
+ * The watchlist's sections, in the order they are shown. The user chooses an entry's section when
+ * adding it and can move it later; [AssetType.suggestedGroup] is only the first suggestion.
+ */
+@Serializable
+enum class AssetGroup(val label: String) {
+  CRYPTO("Crypto"),
+  STOCKS("Stocks"),
+  INDICES("Indices & ETFs"),
+  /** Forex, commodities and anything else. Only shown once something is in it. */
+  OTHER("Other"),
 }
 
 /** One entry of the watchlist. Everything needed to request and display it is stored locally. */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class Asset(
   val provider: Provider,
@@ -41,6 +72,12 @@ data class Asset(
   val currency: String? = null,
   /** Optional name the user gave this entry; shown instead of [name]. */
   val label: String? = null,
+  /**
+   * The watchlist section this entry is shown in. Always written, so that a later change to the
+   * suggestions cannot move entries the user has placed; files from before sections existed get
+   * the suggestion.
+   */
+  @EncodeDefault val group: AssetGroup = type.suggestedGroup,
 ) {
   /** Stable key: the same ticker can be listed by several providers and exchanges. */
   val id: String

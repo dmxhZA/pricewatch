@@ -3,6 +3,7 @@ package app.pricewatch
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import app.pricewatch.data.model.AssetGroup
 import app.pricewatch.data.source.HttpResponse
 import app.pricewatch.testing.FakeHttp
 import app.pricewatch.testing.Request
@@ -103,6 +105,13 @@ class AppFlowTest {
     compose.waitForIdle()
   }
 
+  /** Picks a watchlist section in the menu that adding a search result opens. */
+  private fun chooseSection(label: String) {
+    // The search screen has a "Crypto" heading too; only the menu item can be clicked.
+    waitFor("the section menu") { compose.onAllNodes(hasText(label) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+    compose.onNode(hasText(label) and hasClickAction()).performClick()
+  }
+
   private fun addEtherFromSearch() {
     compose.onNodeWithText("Add an asset").performClick()
     // Before typing, Coinbase's suggestions are listed.
@@ -111,6 +120,10 @@ class AppFlowTest {
     compose.onNode(hasSetTextAction()).performTextInput("eth")
     waitForText("ETH-USD")
     compose.onNodeWithContentDescription("Add ETH-USD to watchlist").performClick()
+    // Its type suggests the Crypto section.
+    compose.onNodeWithText("Add ETH-USD to").assertIsDisplayed()
+    compose.onNodeWithText("Suggested").assertIsDisplayed()
+    chooseSection("Crypto")
     waitForDescription("Remove ETH-USD from watchlist")
     pressBack()
   }
@@ -122,10 +135,12 @@ class AppFlowTest {
     addEtherFromSearch()
 
     waitForText("68,161.53")
+    compose.onNodeWithText("Crypto").assertIsDisplayed()
     compose.onNodeWithText("ETH-USD").assertIsDisplayed()
     compose.onNodeWithText("Ether").assertIsDisplayed()
     compose.onNodeWithText("▼ 2,012.66 (2.87%)").assertIsDisplayed()
     assertEquals(listOf("ETH-USD"), app.container.watchlistStore.assets.value.map { it.symbol })
+    assertEquals(AssetGroup.CRYPTO, app.container.watchlistStore.assets.value.single().group)
   }
 
   @Test
@@ -170,7 +185,7 @@ class AppFlowTest {
   }
 
   @Test
-  fun `edit mode renames, removes and restores an entry`() {
+  fun `edit mode renames, moves to another section, removes and restores an entry`() {
     addEtherFromSearch()
     waitForText("68,161.53")
 
@@ -180,11 +195,17 @@ class AppFlowTest {
     compose.onNodeWithContentDescription("Move ETH-USD up").assertIsNotEnabled()
     compose.onNodeWithContentDescription("Move ETH-USD down").assertIsNotEnabled()
 
-    compose.onNodeWithContentDescription("Rename ETH-USD").performClick()
+    compose.onNodeWithContentDescription("Edit ETH-USD").performClick()
     compose.onNode(hasSetTextAction()).performTextReplacement("Long-term stash")
+    // On the test's small screen the dialog scrolls, and "Other" is its last choice.
+    compose.onNodeWithText("Other").performScrollTo().performClick().assertIsSelected()
     compose.onNodeWithText("Save").performClick()
     waitForText("Long-term stash")
-    assertEquals("Long-term stash", app.container.watchlistStore.assets.value.single().label)
+    val edited = app.container.watchlistStore.assets.value.single()
+    assertEquals("Long-term stash", edited.label)
+    assertEquals(AssetGroup.OTHER, edited.group)
+    compose.onNodeWithText("Other").assertIsDisplayed()
+    assertTrue("the empty Crypto section is gone", !exists("Crypto"))
 
     compose.onNodeWithContentDescription("Remove ETH-USD").performClick()
     waitForText("Removed ETH-USD")
@@ -222,10 +243,12 @@ class AppFlowTest {
     waitForText("NASDAQ · Stock · USD")
     // Apple is listed on several exchanges the free plan covers; its home listing comes first.
     compose.onAllNodesWithContentDescription("Add AAPL to watchlist").onFirst().performClick()
+    chooseSection("Stocks")
     waitForDescription("Remove AAPL from watchlist")
     pressBack()
 
     waitForText("356.27")
+    compose.onNodeWithText("Stocks").assertIsDisplayed()
     compose.onNodeWithText("Apple Inc.").assertIsDisplayed()
     compose.onNodeWithText("▲ 1.39 (0.39%)").assertIsDisplayed()
 

@@ -11,12 +11,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -38,6 +41,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -58,6 +62,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,6 +76,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.pricewatch.data.model.Asset
+import app.pricewatch.data.model.AssetGroup
 import app.pricewatch.data.model.ErrorKind
 import app.pricewatch.data.source.TwelveDataSource
 import app.pricewatch.ui.common.ChangeLabel
@@ -112,7 +120,7 @@ fun WatchlistRoute(onAdd: () -> Unit, onOpen: (Asset) -> Unit, onSettings: () ->
     onOpen = onOpen,
     onSettings = onSettings,
     onMove = viewModel::move,
-    onRename = viewModel::rename,
+    onEdit = viewModel::edit,
     onRemove = { asset ->
       val index = viewModel.remove(asset)
       scope.launch {
@@ -139,13 +147,13 @@ fun WatchlistScreen(
   onOpen: (Asset) -> Unit,
   onSettings: () -> Unit,
   onMove: (Asset, Int) -> Unit,
-  onRename: (Asset, String) -> Unit,
+  onEdit: (Asset, String, AssetGroup) -> Unit,
   onRemove: (Asset) -> Unit,
   snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
   initiallyEditing: Boolean = false,
 ) {
   var editing by rememberSaveable { mutableStateOf(initiallyEditing) }
-  var renamingId by rememberSaveable { mutableStateOf<String?>(null) }
+  var editingId by rememberSaveable { mutableStateOf<String?>(null) }
   val isEmpty = state.rows.isEmpty()
   LaunchedEffect(isEmpty) { if (isEmpty) editing = false }
   BackHandler(enabled = editing) { editing = false }
@@ -210,20 +218,24 @@ fun WatchlistScreen(
             state.waitingUntilMillis?.let { until ->
               item(key = "notice-wait") { RateLimitNotice(until) }
             }
-            itemsIndexed(state.rows, key = { _, row -> row.asset.id }) { index, row ->
-              if (editing) {
-                EditRow(
-                  asset = row.asset,
-                  canMoveUp = index > 0,
-                  canMoveDown = index < state.rows.lastIndex,
-                  onMove = { offset -> onMove(row.asset, offset) },
-                  onRename = { renamingId = row.asset.id },
-                  onRemove = { onRemove(row.asset) },
-                )
-              } else {
-                QuoteRow(row = row, onClick = { onOpen(row.asset) })
+            state.sections.forEach { section ->
+              item(key = "section-${section.group.name}", contentType = "section") { SectionHeader(section.group) }
+              itemsIndexed(section.rows, key = { _, row -> row.asset.id }, contentType = { _, _ -> "row" }) { index, row ->
+                if (editing) {
+                  EditRow(
+                    asset = row.asset,
+                    // Entries move within their section; the edit dialog moves them to another.
+                    canMoveUp = index > 0,
+                    canMoveDown = index < section.rows.lastIndex,
+                    onMove = { offset -> onMove(row.asset, offset) },
+                    onEdit = { editingId = row.asset.id },
+                    onRemove = { onRemove(row.asset) },
+                  )
+                } else {
+                  QuoteRow(row = row, onClick = { onOpen(row.asset) })
+                }
+                if (index < section.rows.lastIndex) HorizontalDivider(Modifier.padding(start = 16.dp))
               }
-              HorizontalDivider()
             }
           }
         }
@@ -232,18 +244,28 @@ fun WatchlistScreen(
   }
 
   state.rows
-    .firstOrNull { it.asset.id == renamingId }
+    .firstOrNull { it.asset.id == editingId }
     ?.asset
     ?.let { asset ->
-      RenameDialog(
+      EditDialog(
         asset = asset,
-        onDismiss = { renamingId = null },
-        onSave = { label ->
-          onRename(asset, label)
-          renamingId = null
+        onDismiss = { editingId = null },
+        onSave = { label, group ->
+          onEdit(asset, label, group)
+          editingId = null
         },
       )
     }
+}
+
+@Composable
+private fun SectionHeader(group: AssetGroup) {
+  Text(
+    group.label,
+    style = MaterialTheme.typography.titleSmall,
+    color = MaterialTheme.colorScheme.primary,
+    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 4.dp).semantics { heading() },
+  )
 }
 
 @Composable
@@ -311,7 +333,7 @@ private fun EditRow(
   canMoveUp: Boolean,
   canMoveDown: Boolean,
   onMove: (Int) -> Unit,
-  onRename: () -> Unit,
+  onEdit: () -> Unit,
   onRemove: () -> Unit,
 ) {
   Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -337,33 +359,69 @@ private fun EditRow(
         overflow = TextOverflow.Ellipsis,
       )
     }
-    IconButton(onClick = onRename) { Icon(Icons.Default.Edit, contentDescription = "Rename ${asset.symbol}") }
+    IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "Edit ${asset.symbol}") }
     IconButton(onClick = onRemove) { Icon(Icons.Default.Delete, contentDescription = "Remove ${asset.symbol}") }
   }
 }
 
+/** The entry's own name and the section it is listed in. */
 @Composable
-private fun RenameDialog(asset: Asset, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+private fun EditDialog(asset: Asset, onDismiss: () -> Unit, onSave: (String, AssetGroup) -> Unit) {
   var text by rememberSaveable(asset.id) { mutableStateOf(asset.displayName) }
+  var group by rememberSaveable(asset.id) { mutableStateOf(asset.group) }
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("Rename ${asset.symbol}") },
-    text = {
-      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true, label = { Text("Name") })
-        Text(
-          "Leave empty to go back to “${asset.name}”.",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-    },
+    title = { Text("Edit ${asset.symbol}") },
+    text = { EditFields(asset, text, onTextChange = { text = it }, group, onGroupChange = { group = it }) },
     confirmButton = {
       // Saving the provider's own name means "no custom name".
-      TextButton(onClick = { onSave(if (text.trim() == asset.name) "" else text) }) { Text("Save") }
+      TextButton(onClick = { onSave(if (text.trim() == asset.name) "" else text, group) }) { Text("Save") }
     },
     dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
   )
+}
+
+@Composable
+private fun EditFields(
+  asset: Asset,
+  text: String,
+  onTextChange: (String) -> Unit,
+  group: AssetGroup,
+  onGroupChange: (AssetGroup) -> Unit,
+) {
+  Column(Modifier.verticalScroll(rememberScrollState())) {
+    OutlinedTextField(value = text, onValueChange = onTextChange, singleLine = true, label = { Text("Name") })
+    Text(
+      "Leave empty to go back to “${asset.name}”.",
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      modifier = Modifier.padding(top = 8.dp),
+    )
+    Text("Section", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
+    GroupChoices(selected = group, suggested = asset.type.suggestedGroup, onSelect = onGroupChange)
+  }
+}
+
+@Composable
+private fun GroupChoices(selected: AssetGroup, suggested: AssetGroup, onSelect: (AssetGroup) -> Unit) {
+  Column(Modifier.selectableGroup()) {
+    AssetGroup.entries.forEach { group ->
+      Row(
+        modifier =
+          Modifier.fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .selectable(selected = group == selected, role = Role.RadioButton, onClick = { onSelect(group) }),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        // The whole row is the control; the button only shows its state.
+        RadioButton(selected = group == selected, onClick = null)
+        Text(group.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp).weight(1f))
+        if (group == suggested) {
+          Text("Suggested", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+      }
+    }
+  }
 }
 
 @Composable
@@ -419,7 +477,7 @@ private fun RateLimitNotice(waitingUntilMillis: Long) {
 @Composable
 private fun WatchlistPreview() {
   PriceWatchTheme {
-    WatchlistScreen(PreviewData.watchlist, {}, {}, {}, {}, { _, _ -> }, { _, _ -> }, {})
+    WatchlistScreen(PreviewData.watchlist, {}, {}, {}, {}, { _, _ -> }, { _, _, _ -> }, {})
   }
 }
 
@@ -431,8 +489,8 @@ private fun WatchlistDarkPreview() {
       PreviewData.watchlist.copy(
         needsApiKey = true,
         rows =
-          PreviewData.watchlist.rows.mapIndexed { i, row ->
-            if (i == 1) row.copy(quote = null, error = ErrorKind.NO_API_KEY) else row
+          PreviewData.watchlist.rows.map { row ->
+            if (row.asset == PreviewData.sp500) row.copy(quote = null, error = ErrorKind.NO_API_KEY) else row
           },
       ),
       {},
@@ -440,7 +498,7 @@ private fun WatchlistDarkPreview() {
       {},
       {},
       { _, _ -> },
-      { _, _ -> },
+      { _, _, _ -> },
       {},
     )
   }
@@ -450,12 +508,25 @@ private fun WatchlistDarkPreview() {
 @Composable
 private fun WatchlistEditingPreview() {
   PriceWatchTheme {
-    WatchlistScreen(PreviewData.watchlist, {}, {}, {}, {}, { _, _ -> }, { _, _ -> }, {}, initiallyEditing = true)
+    WatchlistScreen(PreviewData.watchlist, {}, {}, {}, {}, { _, _ -> }, { _, _, _ -> }, {}, initiallyEditing = true)
   }
 }
 
 @Preview(showBackground = true)
 @Composable
 private fun WatchlistEmptyPreview() {
-  PriceWatchTheme { WatchlistScreen(WatchlistUiState(), {}, {}, {}, {}, { _, _ -> }, { _, _ -> }, {}) }
+  PriceWatchTheme { WatchlistScreen(WatchlistUiState(), {}, {}, {}, {}, { _, _ -> }, { _, _, _ -> }, {}) }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EditDialogPreview() {
+  // A dialog opens in its own window, which previews cannot show; draw its fields in place instead.
+  PriceWatchTheme {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.width(312.dp)) {
+      Box(Modifier.padding(24.dp)) {
+        EditFields(PreviewData.sp500, "My index fund", {}, AssetGroup.INDICES, {})
+      }
+    }
+  }
 }

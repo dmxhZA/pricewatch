@@ -1,6 +1,7 @@
 package app.pricewatch.ui.preview
 
 import app.pricewatch.data.model.Asset
+import app.pricewatch.data.model.AssetGroup
 import app.pricewatch.data.model.AssetType
 import app.pricewatch.data.model.Candle
 import app.pricewatch.data.model.ChangeBasis
@@ -64,11 +65,12 @@ internal object PreviewData {
     WatchlistUiState(
       rows =
         listOf(
+          // In display order, as the store keeps them.
+          WatchlistRow(bitcoin, bitcoinQuote),
+          WatchlistRow(ether, bitcoinQuote.copy(price = 2_412.9, change = 0.0, changePercent = 0.0)),
           WatchlistRow(apple, appleQuote),
           WatchlistRow(sp500, appleQuote.copy(price = 688.12, change = -3.05, changePercent = -0.44)),
           WatchlistRow(euro, appleQuote.copy(price = 1.10214, change = -0.00033, changePercent = -0.03, marketOpen = true)),
-          WatchlistRow(bitcoin, bitcoinQuote),
-          WatchlistRow(ether, bitcoinQuote.copy(price = 2_412.9, change = 0.0, changePercent = 0.0)),
         ),
       updatedAtMillis = NOW,
     )
@@ -78,7 +80,7 @@ internal object PreviewData {
       query = "a",
       crypto = SectionState.Results(listOf(bitcoin, ether.copy(label = null))),
       market = SectionState.Results(listOf(apple, sp500, euro), hiddenCount = 4),
-      addedIds = setOf(apple.id, bitcoin.id),
+      added = mapOf(apple.id to AssetGroup.STOCKS, bitcoin.id to AssetGroup.CRYPTO),
     )
 
   private fun candles(count: Int, start: Double, stepMillis: Long): List<Candle> =
